@@ -17,6 +17,7 @@ namespace SocketsSample
             services.AddSingleton<HubEndpoint>();
             services.AddSingleton<JsonRpcEndpoint>();
             services.AddSingleton<ChatEndPoint>();
+            services.AddSingleton<EchoEndPoint>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -36,6 +37,7 @@ namespace SocketsSample
                 d.MapSocketEndpoint<HubEndpoint>("/hubs");
                 d.MapSocketEndpoint<ChatEndPoint>("/chat");
                 d.MapSocketEndpoint<JsonRpcEndpoint>("/jsonrpc");
+                d.MapSocketEndpoint<EchoEndPoint>("/echo");
             });
         }
     }

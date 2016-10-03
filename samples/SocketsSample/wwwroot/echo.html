@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            var ws = new WebSocket('ws://localhost:2487/echo/ws');
+
+            ws.onopen = function () {
+                console.log('Opened!');
+            };
+
+            ws.onmessage = function (evt) {
+                // TODO: respect length prefixes
+                var child = document.createElement('li');
+                child.innerText = evt.data;
+                document.getElementById('messages').appendChild(child);
+            };
+
+            ws.onclose = function (evt) {
+                console.log('Closed!');
+            };
+
+            document.getElementById('sendmessage').addEventListener('click', () => {
+                let data = document.getElementById('data').value;
+                let prefix = '00000000' + data.length;
+                ws.send(prefix.substr(prefix.length - 8) + data);
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>WebSockets</h1>
+    <input type="text" id="data" />
+    <input type="button" id="sendmessage" value="Send" />
+
+    <ul id="messages"></ul>
+</body>
+</html>
