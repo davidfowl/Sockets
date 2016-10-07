@@ -4,28 +4,47 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Channels;
+using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using SocketsSample.Hubs;
+using SocketsSample.ScaleOut;
 
 namespace SocketsSample
 {
     public class HubEndpoint : JsonRpcEndpoint, IHubConnectionContext
     {
-        private readonly ILogger<HubEndpoint> _logger;
+        private readonly static string _serverName = Guid.NewGuid().ToString();
 
-        public HubEndpoint(ILogger<HubEndpoint> logger, ILogger<JsonRpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider)
+        private readonly ILogger<HubEndpoint> _logger;
+        private readonly IServerMessageBus _messageBus;
+        private readonly IDistributedConnectionStore _connectionStore;
+        private readonly HashSet<string> _hubSignals = new HashSet<string>();
+
+        public HubEndpoint(IDistributedConnectionStore connectionStore, IServerMessageBus messageBus, ILogger<HubEndpoint> logger, ILogger<JsonRpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider)
             : base(jsonRpcLogger, serviceProvider)
         {
             _logger = logger;
-            All = new AllClientProxy(this);
+            _connectionStore = connectionStore;
+            _messageBus = messageBus;
+            All = new AllClientProxy(this, _connectionStore, _messageBus);
         }
 
         public IClientProxy All { get; }
 
         public IClientProxy Client(string connectionId)
         {
-            return new SingleClientProxy(this, connectionId);
+            return new SingleClientProxy(this, connectionId, _connectionStore, _messageBus);
+        }
+
+        public override async Task OnConnected(Connection connection)
+        {
+            // Store the connection in the distributed store
+            var signals = new List<string>(_hubSignals);
+            signals.Add(connection.ConnectionId);
+            await _connectionStore.AddConnectionAsync(_serverName, connection.ConnectionId, connection?.User?.Identity?.Name, signals);
+
+            await base.OnConnected(connection);
         }
 
         private byte[] Pack(string method, object[] args)
@@ -44,7 +63,10 @@ namespace SocketsSample
 
         protected override void Initialize(object endpoint)
         {
-            ((Hub)endpoint).Clients = this;
+            var hub = endpoint as Hub;
+            hub.Clients = this;
+            _hubSignals.Add(hub.GetType().FullName);
+
             base.Initialize(endpoint);
         }
 
@@ -54,51 +76,95 @@ namespace SocketsSample
             RegisterJsonRPCEndPoint(typeof(Chat));
         }
 
-        private class AllClientProxy : IClientProxy
+        private abstract class ClientProxy: IClientProxy
         {
-            private readonly HubEndpoint _endPoint;
+            private readonly IDistributedConnectionStore _connectionStore;
+            private readonly IServerMessageBus _messageBus;
 
-            public AllClientProxy(HubEndpoint endPoint)
+            public ClientProxy(HubEndpoint endPoint, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
             {
-                _endPoint = endPoint;
+                EndPoint = endPoint;
+                _connectionStore = connectionStore;
+                _messageBus = messageBus;
             }
 
-            public Task Invoke(string method, params object[] args)
+            public HubEndpoint EndPoint { get; }
+
+            public abstract Task Invoke(string method, params object[] args);
+
+            protected async Task InvokeRemote(string signal, string method, object[] args)
             {
-                // REVIEW: Thread safety
-                var tasks = new List<Task>(_endPoint.Connections.Count);
+                var remoteConnections = await _connectionStore.GetRemoteConnectionsAsync(_serverName, signal);
 
-                byte[] message = null;
+                var remoteSends = new List<Task>(remoteConnections.Count);
+                var message = new HubScaleoutMessage(signal, method, args);
 
-                foreach (var connection in _endPoint.Connections)
+                foreach (var server in remoteConnections)
                 {
-                    if (message == null)
-                    {
-                        message = _endPoint.Pack(method, args);
-                    }
-
-                    tasks.Add(connection.Channel.Output.WriteAsync(message));
+                    // Send message to each server
+                    remoteSends.Add(_messageBus.SendAsync(server.Key, message));
                 }
 
-                return Task.WhenAll(tasks);
+                await Task.WhenAll(remoteSends);
             }
         }
 
-        private class SingleClientProxy : IClientProxy
+        private class AllClientProxy : ClientProxy
+        {
+            public AllClientProxy(HubEndpoint endPoint, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
+                : base(endPoint, connectionStore, messageBus)
+            {
+
+            }
+
+            public override Task Invoke(string method, params object[] args)
+            {
+                // REVIEW: Thread safety
+                var sendTasks = new List<Task>(EndPoint.Connections.Count);
+
+                byte[] message = null;
+
+                // Send message to connections on this server
+                foreach (var connection in EndPoint.Connections)
+                {
+                    if (message == null)
+                    {
+                        message = EndPoint.Pack(method, args);
+                    }
+
+                    sendTasks.Add(connection.Channel.Output.WriteAsync(message));
+                }
+
+                // Send message to connections on other servers
+                string hubName = null;
+                sendTasks.Add(InvokeRemote(hubName, method, args));
+
+                return Task.WhenAll(sendTasks);
+            }
+        }
+
+        private class SingleClientProxy : ClientProxy
         {
             private readonly string _connectionId;
-            private readonly HubEndpoint _endPoint;
 
-            public SingleClientProxy(HubEndpoint endPoint, string connectionId)
+            public SingleClientProxy(HubEndpoint endPoint, string connectionId, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
+                 : base(endPoint, connectionStore, messageBus)
             {
-                _endPoint = endPoint;
                 _connectionId = connectionId;
             }
 
-            public Task Invoke(string method, params object[] args)
+            public override Task Invoke(string method, params object[] args)
             {
-                var connection = _endPoint.Connections[_connectionId];
-                return connection?.Channel.Output.WriteAsync(_endPoint.Pack(method, args));
+                var connection = EndPoint.Connections[_connectionId];
+                if (connection != null)
+                {
+                    // Local send
+                    return connection?.Channel.Output.WriteAsync(EndPoint.Pack(method, args));
+                }
+
+                // Attempt a remote send
+                // TODO: Handle unknown connection id properly
+                return InvokeRemote(_connectionId, method, args);
             }
         }
     }

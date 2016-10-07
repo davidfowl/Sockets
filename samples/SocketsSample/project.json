@@ -13,7 +13,12 @@
     "Microsoft.AspNetCore.Server.IISIntegration": "1.1.0-*",
     "Microsoft.AspNetCore.Server.WebListener": "0.1.0",
     "Microsoft.AspNetCore.Server.Kestrel": "1.1.0-*",
-    "Microsoft.Extensions.Logging.Console": "1.1.0-*"
+    "Microsoft.Extensions.Logging.Console": "1.1.0-*",
+    "Microsoft.EntityFrameworkCore.SqlServer": "1.1.0-*",
+    "StackExchange.Redis": "1.1.*",
+    "Microsoft.Extensions.Configuration.FileExtensions": "1.1.0-*",
+    "Microsoft.Extensions.Configuration.Json": "1.1.0-*",
+    "Microsoft.Extensions.Configuration.UserSecrets": "1.1.0-*"
   },
 
   "tools": {
