@@ -1,6 +1,8 @@
-﻿namespace SocketsSample
+﻿using System.IO;
+
+namespace SocketsSample
 {
-    internal class HubScaleoutMessage
+    public class HubScaleoutMessage
     {
         public HubScaleoutMessage(string hubName, string method, object[] args)
         {

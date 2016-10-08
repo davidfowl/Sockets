@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Channels;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SocketsSample.Hubs;
 using SocketsSample.ScaleOut;
@@ -28,6 +29,7 @@ namespace SocketsSample
             _connectionStore = connectionStore;
             _messageBus = messageBus;
             All = new AllClientProxy(this, _connectionStore, _messageBus);
+            _messageBus.SubscribeAsync(_serverName, OnScaleoutMessage);
         }
 
         public IClientProxy All { get; }
@@ -45,6 +47,16 @@ namespace SocketsSample
             await _connectionStore.AddConnectionAsync(_serverName, connection.ConnectionId, connection?.User?.Identity?.Name, signals);
 
             await base.OnConnected(connection);
+        }
+
+        private void OnScaleoutMessage(byte[] message)
+        {
+            // TODO: This would use formatters eventually to deserialize the HubScaleoutMessage
+            var json = Encoding.UTF8.GetString(message);
+            var hubMessage = JsonConvert.DeserializeObject<HubScaleoutMessage>(json);
+
+            // Invoke the method
+            ((AllClientProxy)All).InvokeLocal(hubMessage.Method, hubMessage.Args);
         }
 
         private byte[] Pack(string method, object[] args)
@@ -89,6 +101,7 @@ namespace SocketsSample
             }
 
             public HubEndpoint EndPoint { get; }
+            public object JsonSerialize { get; private set; }
 
             public abstract Task Invoke(string method, params object[] args);
 
@@ -102,7 +115,9 @@ namespace SocketsSample
                 foreach (var server in remoteConnections)
                 {
                     // Send message to each server
-                    remoteSends.Add(_messageBus.SendAsync(server.Key, message));
+                    // TODO: This would use formatters eventually to serialize the HubScaleoutMessage
+                    var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message));
+                    remoteSends.Add(_messageBus.PublishAsync(server.Key, payload));
                 }
 
                 await Task.WhenAll(remoteSends);
@@ -120,11 +135,22 @@ namespace SocketsSample
             public override Task Invoke(string method, params object[] args)
             {
                 // REVIEW: Thread safety
-                var sendTasks = new List<Task>(EndPoint.Connections.Count);
+                var sendTasks = new List<Task>(EndPoint.Connections.Count + 1);
 
+                // Send message to local connections
+                sendTasks.AddRange(InvokeLocal(method, args));
+
+                // Send message to connections on other servers
+                string hubName = null;
+                sendTasks.Add(InvokeRemote(hubName, method, args));
+
+                return Task.WhenAll(sendTasks);
+            }
+
+            public IEnumerable<Task> InvokeLocal(string method, object[] args)
+            {
                 byte[] message = null;
 
-                // Send message to connections on this server
                 foreach (var connection in EndPoint.Connections)
                 {
                     if (message == null)
@@ -132,14 +158,8 @@ namespace SocketsSample
                         message = EndPoint.Pack(method, args);
                     }
 
-                    sendTasks.Add(connection.Channel.Output.WriteAsync(message));
+                    yield return connection.Channel.Output.WriteAsync(message);
                 }
-
-                // Send message to connections on other servers
-                string hubName = null;
-                sendTasks.Add(InvokeRemote(hubName, method, args));
-
-                return Task.WhenAll(sendTasks);
             }
         }
 

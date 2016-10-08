@@ -7,6 +7,8 @@ namespace SocketsSample.ScaleOut
 {
     public interface IServerMessageBus
     {
-        Task SendAsync<TMessage>(string key, TMessage message);
+        Task PublishAsync(string key, byte[] message);
+
+        Task SubscribeAsync(string key, Action<byte[]> receiveCallback);
     }
 }
