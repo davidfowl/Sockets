@@ -9,6 +9,6 @@ namespace SocketsSample.ScaleOut
     {
         Task PublishAsync(string key, byte[] message);
 
-        Task SubscribeAsync(string key, Action<byte[]> receiveCallback);
+        Task SubscribeAsync(string key, Func<byte[], Task> receiveCallback);
     }
 }

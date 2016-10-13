@@ -42,13 +42,21 @@ namespace SocketsSample.ScaleOut
 
         public async Task<IList<IGrouping<string, RemoteConnection>>> GetRemoteConnectionsAsync(string serverName, string signal)
         {
-            IList<IGrouping<string, RemoteConnection>> connections = await _db.Signals
-                .Include(s => s.Connections)
-                .Where(s => s.Name == signal)
-                .SelectMany(s => s.Connections)
-                .Select(cs => cs.Connection)
+            IList<IGrouping<string, RemoteConnection>> connections = await _db.Connections
+                .Include(c => c.Signals)
+                .Where(c => c.ServerName != serverName)
+                .Where(c => c.Signals.Any(s => s.Signal.Name == signal))
                 .GroupBy(c => c.ServerName)
                 .ToListAsync();
+
+            //IList<IGrouping<string, RemoteConnection>> connections = await _db.Signals
+            //    .Include(s => s.Connections)
+            //    .Where(s => s.Name == signal)
+            //    .SelectMany(s => s.Connections)
+            //    .Select(cs => cs.Connection)
+            //    .Where(c => c.ServerName != serverName)
+            //    .GroupBy(c => c.ServerName)
+            //    .ToListAsync();
 
             return connections;
         }

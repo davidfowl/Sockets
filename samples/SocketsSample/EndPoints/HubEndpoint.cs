@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,14 +14,15 @@ using SocketsSample.ScaleOut;
 
 namespace SocketsSample
 {
-    public class HubEndpoint : JsonRpcEndpoint, IHubConnectionContext
+    public class HubEndpoint : JsonRpcEndpoint
     {
-        private readonly static string _serverName = Guid.NewGuid().ToString();
+        private readonly static string _serverName = "svr-" + Guid.NewGuid().ToString();
 
         private readonly ILogger<HubEndpoint> _logger;
         private readonly IServerMessageBus _messageBus;
         private readonly IDistributedConnectionStore _connectionStore;
         private readonly HashSet<string> _hubSignals = new HashSet<string>();
+        private readonly ConcurrentDictionary<Type, IHubConnectionContext> _hubContexts = new ConcurrentDictionary<Type, IHubConnectionContext>();
 
         public HubEndpoint(IDistributedConnectionStore connectionStore, IServerMessageBus messageBus, ILogger<HubEndpoint> logger, ILogger<JsonRpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider)
             : base(jsonRpcLogger, serviceProvider)
@@ -28,11 +30,13 @@ namespace SocketsSample
             _logger = logger;
             _connectionStore = connectionStore;
             _messageBus = messageBus;
-            All = new AllClientProxy(this, _connectionStore, _messageBus);
             _messageBus.SubscribeAsync(_serverName, OnScaleoutMessage);
         }
 
-        public IClientProxy All { get; }
+        public IClientProxy All(string hubName)
+        {
+            return new AllClientProxy(this, hubName, _connectionStore, _messageBus);
+        }
 
         public IClientProxy Client(string connectionId)
         {
@@ -49,14 +53,15 @@ namespace SocketsSample
             await base.OnConnected(connection);
         }
 
-        private void OnScaleoutMessage(byte[] message)
+        private Task OnScaleoutMessage(byte[] message)
         {
             // TODO: This would use formatters eventually to deserialize the HubScaleoutMessage
             var json = Encoding.UTF8.GetString(message);
             var hubMessage = JsonConvert.DeserializeObject<HubScaleoutMessage>(json);
 
             // Invoke the method
-            ((AllClientProxy)All).InvokeLocal(hubMessage.Method, hubMessage.Args);
+            var proxy = new AllClientProxy(this, hubMessage.HubName, _connectionStore, _messageBus);
+            return Task.WhenAll(proxy.InvokeLocal(hubMessage.Method, hubMessage.Args));
         }
 
         private byte[] Pack(string method, object[] args)
@@ -76,8 +81,11 @@ namespace SocketsSample
         protected override void Initialize(object endpoint)
         {
             var hub = endpoint as Hub;
-            hub.Clients = this;
-            _hubSignals.Add(hub.GetType().FullName);
+            hub.Clients = _hubContexts.GetOrAdd(hub.GetType(), t =>
+            {
+                var allProxy = new AllClientProxy(this, t.FullName, _connectionStore, _messageBus);
+                return new HubConnectionContext(allProxy, this);
+            });
 
             base.Initialize(endpoint);
         }
@@ -86,6 +94,22 @@ namespace SocketsSample
         {
             // Register the chat hub
             RegisterJsonRPCEndPoint(typeof(Chat));
+            _hubSignals.Add(typeof(Chat).FullName);
+        }
+
+        private class HubConnectionContext : IHubConnectionContext
+        {
+            private readonly HubEndpoint _hubEndpoint;
+
+            public HubConnectionContext(IClientProxy all, HubEndpoint hubEndpoint)
+            {
+                All = all;
+                _hubEndpoint = hubEndpoint;
+            }
+
+            public IClientProxy All { get; }
+
+            public IClientProxy Client(string connectionId) => _hubEndpoint.Client(connectionId);
         }
 
         private abstract class ClientProxy: IClientProxy
@@ -93,24 +117,26 @@ namespace SocketsSample
             private readonly IDistributedConnectionStore _connectionStore;
             private readonly IServerMessageBus _messageBus;
 
-            public ClientProxy(HubEndpoint endPoint, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
+            public ClientProxy(HubEndpoint endPoint, string signal, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
             {
                 EndPoint = endPoint;
+                Signal = signal;
                 _connectionStore = connectionStore;
                 _messageBus = messageBus;
             }
 
             public HubEndpoint EndPoint { get; }
-            public object JsonSerialize { get; private set; }
+
+            public string Signal { get;}
 
             public abstract Task Invoke(string method, params object[] args);
 
-            protected async Task InvokeRemote(string signal, string method, object[] args)
+            protected async Task InvokeRemote(string method, object[] args)
             {
-                var remoteConnections = await _connectionStore.GetRemoteConnectionsAsync(_serverName, signal);
+                var remoteConnections = await _connectionStore.GetRemoteConnectionsAsync(_serverName, Signal);
 
                 var remoteSends = new List<Task>(remoteConnections.Count);
-                var message = new HubScaleoutMessage(signal, method, args);
+                var message = new HubScaleoutMessage(Signal, method, args);
 
                 foreach (var server in remoteConnections)
                 {
@@ -126,8 +152,8 @@ namespace SocketsSample
 
         private class AllClientProxy : ClientProxy
         {
-            public AllClientProxy(HubEndpoint endPoint, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
-                : base(endPoint, connectionStore, messageBus)
+            public AllClientProxy(HubEndpoint endPoint, string hubSignal, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
+                : base(endPoint, hubSignal, connectionStore, messageBus)
             {
 
             }
@@ -141,8 +167,7 @@ namespace SocketsSample
                 sendTasks.AddRange(InvokeLocal(method, args));
 
                 // Send message to connections on other servers
-                string hubName = null;
-                sendTasks.Add(InvokeRemote(hubName, method, args));
+                sendTasks.Add(InvokeRemote(method, args));
 
                 return Task.WhenAll(sendTasks);
             }
@@ -165,17 +190,15 @@ namespace SocketsSample
 
         private class SingleClientProxy : ClientProxy
         {
-            private readonly string _connectionId;
-
             public SingleClientProxy(HubEndpoint endPoint, string connectionId, IDistributedConnectionStore connectionStore, IServerMessageBus messageBus)
-                 : base(endPoint, connectionStore, messageBus)
+                 : base(endPoint, connectionId, connectionStore, messageBus)
             {
-                _connectionId = connectionId;
+                
             }
 
             public override Task Invoke(string method, params object[] args)
             {
-                var connection = EndPoint.Connections[_connectionId];
+                var connection = EndPoint.Connections[Signal];
                 if (connection != null)
                 {
                     // Local send
@@ -184,7 +207,7 @@ namespace SocketsSample
 
                 // Attempt a remote send
                 // TODO: Handle unknown connection id properly
-                return InvokeRemote(_connectionId, method, args);
+                return InvokeRemote(method, args);
             }
         }
     }

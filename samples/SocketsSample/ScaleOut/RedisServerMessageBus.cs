@@ -24,7 +24,7 @@ namespace SocketsSample.ScaleOut
             return _subscriber.PublishAsync(key, message);
         }
 
-        public Task SubscribeAsync(string key, Action<byte[]> receiveCallback)
+        public Task SubscribeAsync(string key, Func<byte[], Task> receiveCallback)
         {
             return _subscriber.SubscribeAsync(key, (_, message) => receiveCallback(message));
         }
