@@ -51,6 +51,8 @@ namespace SocketsSample
             await _connectionStore.AddConnectionAsync(_serverName, connection.ConnectionId, connection?.User?.Identity?.Name, signals);
 
             await base.OnConnected(connection);
+
+            await _connectionStore.RemoveConnectionAsync(_serverName, connection.ConnectionId);
         }
 
         private Task OnScaleoutMessage(byte[] message)
