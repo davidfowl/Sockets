@@ -19,7 +19,7 @@ namespace SocketsSample
 
             if (env.IsDevelopment())
             {
-                builder.AddUserSecrets();
+                //builder.AddUserSecrets();
             }
 
             builder.AddEnvironmentVariables();

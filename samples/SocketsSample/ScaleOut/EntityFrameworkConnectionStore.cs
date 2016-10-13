@@ -28,7 +28,11 @@ namespace SocketsSample.ScaleOut
                     remoteSignal = new Signal { Name = signal };
                     _db.Signals.Add(remoteSignal);
                 }
-                connection.Signals.Add(remoteSignal);
+                connection.Signals.Add(new RemoteConnectionSignal
+                {
+                    Connection = connection,
+                    Signal = remoteSignal
+                });
             }
 
             _db.Connections.Add(connection);
@@ -42,6 +46,7 @@ namespace SocketsSample.ScaleOut
                 .Include(s => s.Connections)
                 .Where(s => s.Name == signal)
                 .SelectMany(s => s.Connections)
+                .Select(cs => cs.Connection)
                 .GroupBy(c => c.ServerName)
                 .ToListAsync();
 

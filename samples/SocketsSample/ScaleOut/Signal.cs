@@ -10,6 +10,6 @@ namespace SocketsSample.ScaleOut
         // TODO: How to enforce that this is unique?
         public string Name { get; set; }
 
-        public virtual ICollection<RemoteConnection> Connections { get; set; }
+        public virtual ICollection<RemoteConnectionSignal> Connections { get; set; } = new List<RemoteConnectionSignal>();
     }
 }
