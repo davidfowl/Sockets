@@ -20,7 +20,8 @@
     "Microsoft.Extensions.Configuration.FileExtensions": "1.1.0-*",
     "Microsoft.Extensions.Configuration.Json": "1.1.0-*",
     "Microsoft.Extensions.Configuration.UserSecrets": "1.1.0-*",
-    "Microsoft.Extensions.Configuration.CommandLine": "1.1.0-*"
+    "Microsoft.Extensions.Configuration.CommandLine": "1.1.0-*",
+    "Microsoft.Extensions.Logging.Debug": "1.1.0-*"
   },
 
   "tools": {
@@ -51,7 +52,8 @@
   "publishOptions": {
     "include": [
       "wwwroot",
-      "web.config"
+      "web.config",
+      "appsettings.json"
     ]
   },
 

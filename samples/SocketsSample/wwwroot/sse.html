@@ -49,7 +49,18 @@
                     if (xhr.readyState == 4 && xhr.status == 200) {
                     }
                 }
-                xhr.send(data);
+
+                var xh2 = new XMLHttpRequest();
+                xh2.open('GET', `http://${location.host}/asasas`);
+                xh2.onreadystatechange = function () {
+                    if (this.readyState === 4) {
+                        var resp = xh2.responseText;
+                        console.log(resp);
+                        xhr.send(resp.toString() + ": " + data);
+                    }
+                };
+                xh2.send(null);
+                //xhr.send(data);
             };
 
             // Start the connection

@@ -15,6 +15,7 @@
             };
 
             ws.onmessage = function (event) {
+                console.log('Message!');
                 var response = JSON.parse(event.data);
 
                 // Response

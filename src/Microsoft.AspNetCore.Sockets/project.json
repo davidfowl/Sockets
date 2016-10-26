@@ -1,7 +1,7 @@
 ﻿{
   "version": "0.1.0-*",
   "dependencies": {
-    "Channels": "0.2.0-beta-*",
+    "Channels": "0.2.0-beta-15577",
     "Microsoft.AspNetCore.Routing": "1.1.0-*",
     "Microsoft.AspNetCore.WebSockets": "0.2.0-*"
   },

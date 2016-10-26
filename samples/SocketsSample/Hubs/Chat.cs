@@ -9,7 +9,7 @@ namespace SocketsSample.Hubs
     {
         public void Send(string message)
         {
-            Clients.All.Invoke("Send", message);
+            Clients.All.Invoke("Send", Environment.MachineName + ": " + message);
         }
     }
 }

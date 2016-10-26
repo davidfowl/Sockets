@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SocketsSample.ScaleOut;
+using System;
+using System.Text;
 
 namespace SocketsSample
 {
@@ -41,7 +43,17 @@ namespace SocketsSample
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
+            app.Map("/asasas", c =>
+            {
+                c.Run(async h =>
+                {
+                    var g = Encoding.UTF8.GetBytes(Environment.MachineName);
+                    //await h.Response.Body.WriteAsync(Environment.MachineName);
+                    await h.Response.Body.WriteAsync(g, 0, g.Length);
+                });
+            });
             loggerFactory.AddConsole(LogLevel.Debug);
+            loggerFactory.AddDebug(LogLevel.Debug);
 
             app.UseFileServer();
 
