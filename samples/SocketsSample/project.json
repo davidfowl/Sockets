@@ -21,7 +21,8 @@
     "Microsoft.Extensions.Configuration.Json": "1.1.0-*",
     "Microsoft.Extensions.Configuration.UserSecrets": "1.1.0-*",
     "Microsoft.Extensions.Configuration.CommandLine": "1.1.0-*",
-    "Microsoft.Extensions.Logging.Debug": "1.1.0-*"
+    "Microsoft.Extensions.Logging.Debug": "1.1.0-*",
+    "Channels.Text.Primitives": "0.2.0-beta-15577"
   },
 
   "tools": {

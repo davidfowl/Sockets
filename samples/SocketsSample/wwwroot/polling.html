@@ -64,16 +64,16 @@
                     }
                 }
 
-                //var xh2 = new XMLHttpRequest();
-                //xh2.open('GET', `http://${location.host}/asasas`);
-                //xh2.onreadystatechange = function () {
-                    //if (this.readyState === 4) {
-                        //var resp = xh2.responseText;
-                        //console.log(resp);
-                        xhr.send(/*resp.toString() + ": " +*/ data);
-                    //}
-                //};
-                //xh2.send(null);
+                var xh2 = new XMLHttpRequest();
+                xh2.open('GET', `http://${location.host}/asasas`);
+                xh2.onreadystatechange = function () {
+                    if (this.readyState === 4) {
+                        var resp = xh2.responseText;
+                        console.log(resp);
+                        xhr.send(data + " : " + resp.toString());
+                    }
+                };
+                xh2.send(null);
             };
 
             xhr('GET', `${sock.url}/getid`).then(connectionId => {

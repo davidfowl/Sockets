@@ -56,7 +56,7 @@
                     if (this.readyState === 4) {
                         var resp = xh2.responseText;
                         console.log(resp);
-                        xhr.send(resp.toString() + ": " + data);
+                        xhr.send(data + " : " + resp.toString());
                     }
                 };
                 xh2.send(null);
