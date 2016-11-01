@@ -34,25 +34,29 @@ namespace SocketsSample.EndPoints.Hubs
     {
         private readonly Func<string, Connection, IDisposable> _subscribe;
         private readonly Connection _connection;
+        private readonly string _hubName;
 
-        public PubSubGroupManager(Func<string, Connection, IDisposable> subscribe, Connection connection)
+        public PubSubGroupManager(Func<string, Connection, IDisposable> subscribe, string hubName, Connection connection)
         {
             _subscribe = subscribe;
+            _hubName = hubName;
             _connection = connection;
         }
 
         public void Add(string groupName)
         {
             var groups = _connection.Metadata.GetOrAdd("groups", k => new ConcurrentDictionary<string, IDisposable>());
-            groups[groupName] = _subscribe(groupName, _connection);
+            var key = _hubName + "." + groupName;
+            groups[key] = _subscribe(key, _connection);
         }
 
         public void Remove(string groupName)
         {
+            var key = _hubName + "." + groupName;
             var groups = _connection.Metadata.Get<ConcurrentDictionary<string, IDisposable>>("groups");
 
             IDisposable subscription;
-            if (groups.TryRemove(groupName, out subscription))
+            if (groups.TryRemove(key, out subscription))
             {
                 subscription.Dispose();
             }
