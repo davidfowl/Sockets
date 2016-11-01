@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SocketsSample.Hubs;
 
 namespace SocketsSample
 {
@@ -16,9 +17,9 @@ namespace SocketsSample
         {
             services.AddRouting();
 
-            services.AddSingleton<HubEndpoint>();
             services.AddSingleton<RpcEndpoint>();
             services.AddSingleton<ChatEndPoint>();
+            services.AddSingleton<Chat>();
 
             services.AddSingleton<ProtobufSerializer>();
             services.AddSingleton<InvocationAdapterRegistry>();
@@ -39,7 +40,7 @@ namespace SocketsSample
 
             app.UseSockets(routes =>
             {
-                routes.MapSocketEndpoint<HubEndpoint>("/hubs");
+                routes.MapSocketEndpoint<Chat>("/hubs");
                 routes.MapSocketEndpoint<ChatEndPoint>("/chat");
                 routes.MapSocketEndpoint<RpcEndpoint>("/jsonrpc");
             });

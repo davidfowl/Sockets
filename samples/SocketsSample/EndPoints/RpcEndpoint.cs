@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -8,9 +7,6 @@ using Channels;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using SocketsSample.Protobuf;
 
 namespace SocketsSample
 {
@@ -53,7 +49,8 @@ namespace SocketsSample
             {
                 var invocationDescriptor =
                     await invocationAdapter.ReadInvocationDescriptor(
-                            stream, methodName => {
+                            stream, methodName =>
+                            {
                                 Type[] types;
                                 // TODO: null or throw?
                                 return _paramTypes.TryGetValue(methodName, out types) ? types : null;
@@ -90,8 +87,13 @@ namespace SocketsSample
             }
         }
 
-        protected virtual void Initialize(Connection connection, object endpoint)
+        protected virtual void BeforeInvoke(Connection connection, object endpoint)
         {
+        }
+
+        protected virtual void AfterInvoke(Connection connection, object endpoint)
+        {
+
         }
 
         protected void RegisterRPCEndPoint(Type type)
@@ -118,31 +120,27 @@ namespace SocketsSample
                     var invocationResult = new InvocationResultDescriptor();
                     invocationResult.Id = invocationDescriptor.Id;
 
-                    var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+                    BeforeInvoke(connection, this);
 
-                    // Scope per call so that deps injected get disposed
-                    using (var scope = scopeFactory.CreateScope())
+                    try
                     {
-                        object value = scope.ServiceProvider.GetService(type) ?? Activator.CreateInstance(type);
+                        var args = invocationDescriptor.Arguments
+                            .Zip(parameters, (a, p) => Convert.ChangeType(a, p.ParameterType))
+                            .ToArray();
 
-                        Initialize(connection, value);
-
-                        try
-                        {
-                            var args = invocationDescriptor.Arguments
-                                .Zip(parameters, (a, p) => Convert.ChangeType(a, p.ParameterType))
-                                .ToArray();
-
-                            invocationResult.Result = methodInfo.Invoke(value, args);
-                        }
-                        catch (TargetInvocationException ex)
-                        {
-                            invocationResult.Error = ex.InnerException.Message;
-                        }
-                        catch (Exception ex)
-                        {
-                            invocationResult.Error = ex.Message;
-                        }
+                        invocationResult.Result = methodInfo.Invoke(this, args);
+                    }
+                    catch (TargetInvocationException ex)
+                    {
+                        invocationResult.Error = ex.InnerException.Message;
+                    }
+                    catch (Exception ex)
+                    {
+                        invocationResult.Error = ex.Message;
+                    }
+                    finally
+                    {
+                        AfterInvoke(connection, this);
                     }
 
                     return invocationResult;

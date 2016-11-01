@@ -2,20 +2,25 @@
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Sockets;
+
 namespace SocketsSample.Hubs
 {
-    public class Hub
-    {
-        public IHubConnectionContext Clients { get; set; }
-
-        public HubCallerContext Context { get; set; }
-    }
-
     public interface IHubConnectionContext
     {
         IClientProxy All { get; }
 
         IClientProxy Client(string connectionId);
+
+        IClientProxy Group(string groupName);
+
+        IClientProxy User(string userId);
+    }
+
+    public interface IGroupManager
+    {
+        void Add(string groupName);
+        void Remove(string groupName);
     }
 
     public interface IClientProxy
@@ -31,11 +36,14 @@ namespace SocketsSample.Hubs
 
     public class HubCallerContext
     {
-        public HubCallerContext(string connectionId, ClaimsPrincipal user)
+        public HubCallerContext(Connection connection)
         {
-            ConnectionId = connectionId;
-            User = user;
+            ConnectionId = connection.ConnectionId;
+            User = connection.User;
+            Connection = connection;
         }
+
+        public Connection Connection { get; }
 
         public ClaimsPrincipal User { get; }
 

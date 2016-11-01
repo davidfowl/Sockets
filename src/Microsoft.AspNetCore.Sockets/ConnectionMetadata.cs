@@ -13,7 +13,9 @@ namespace Microsoft.AspNetCore.Sockets
         {
             get
             {
-                return _metadata[key];
+                object value;
+                _metadata.TryGetValue(key, out value);
+                return value;
             }
             set
             {
