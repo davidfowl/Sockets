@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Threading;
+using System.Threading.Tasks;
+using Channels;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,7 @@ namespace SocketsSample
 {
     public class Hub : RpcEndpoint, IHubConnectionContext
     {
-        private readonly IServiceProvider _serviceProvider;
+        protected readonly IServiceProvider _serviceProvider;
         private readonly AllClientProxy _all;
 
         // Currently executing connection
@@ -28,7 +30,7 @@ namespace SocketsSample
 
         public IHubConnectionContext Clients => this;
 
-        private Connection Connection => _connection.Value;
+        protected Connection Connection => _connection.Value;
 
         public virtual HubCallerContext Context => new HubCallerContext(Connection);
 
@@ -36,19 +38,19 @@ namespace SocketsSample
 
         public virtual IServiceProvider Services => _scope.Value.ServiceProvider;
 
-        IClientProxy IHubConnectionContext.All => _all;
+        public virtual IClientProxy All => _all;
 
-        IClientProxy IHubConnectionContext.Client(string connectionId)
+        public virtual IClientProxy Client(string connectionId)
         {
             return new SingleClientProxy(_serviceProvider, Connections, connectionId);
         }
 
-        IClientProxy IHubConnectionContext.Group(string groupName)
+        public virtual IClientProxy Group(string groupName)
         {
             return new GroupProxy(_serviceProvider, Connections, groupName);
         }
 
-        IClientProxy IHubConnectionContext.User(string userId)
+        public virtual IClientProxy User(string userId)
         {
             return new UserProxy(_serviceProvider, Connections, userId);
         }
@@ -69,6 +71,60 @@ namespace SocketsSample
         protected override void DiscoverEndpoints()
         {
             RegisterRPCEndPoint(GetType());
+        }
+    }
+
+    public class PubSubHub : Hub
+    {
+        private readonly IPubSub _bus;
+        private readonly IClientProxy _all;
+
+        public PubSubHub(IPubSub bus, ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(jsonRpcLogger, serviceProvider)
+        {
+            _bus = bus;
+            _all = new PubSubClientProxy(GetType().Name, bus);
+        }
+
+        public override IClientProxy All => _all;
+
+        public override IClientProxy Client(string connectionId)
+        {
+            return new PubSubClientProxy(GetType().Name + "." + connectionId, _bus);
+        }
+
+        public override IClientProxy Group(string groupName)
+        {
+            return new PubSubClientProxy(GetType().Name + "." + groupName, _bus);
+        }
+
+        public override IClientProxy User(string userId)
+        {
+            return new PubSubClientProxy(GetType().Name + "." + userId, _bus);
+        }
+
+        public override IGroupManager Groups => new PubSubGroupManager(Subscribe, Connection);
+
+        public override async Task OnConnected(Connection connection)
+        {
+            using (Subscribe(GetType().Name, connection))
+            using (Subscribe(GetType().Name + "." + connection.ConnectionId, connection))
+            using (Subscribe(GetType().Name + "." + connection.User.Identity.Name, connection))
+            {
+                await base.OnConnected(connection);
+            }
+        }
+
+        private IDisposable Subscribe(string signal, Connection connection)
+        {
+            return _bus.Subscribe(signal, message =>
+            {
+                var invocationAdapter =
+                    _serviceProvider
+                        .GetRequiredService<InvocationAdapterRegistry>()
+                        .GetInvocationAdapter((string)connection.Metadata["formatType"]);
+
+                return invocationAdapter.WriteInvocationDescriptor((InvocationDescriptor)message, connection.Channel.GetStream());
+            });
         }
     }
 }

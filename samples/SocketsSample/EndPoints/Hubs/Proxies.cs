@@ -23,26 +23,6 @@ namespace SocketsSample.EndPoints.Hubs
         }
     }
 
-    public class GroupManager : IGroupManager
-    {
-        private readonly Connection _connection;
-        public GroupManager(Connection connection)
-        {
-            _connection = connection;
-        }
-
-        public void Add(string groupName)
-        {
-            // TODO: Make metadata thread safe
-            _connection.Metadata["group"] = groupName;
-        }
-
-        public void Remove(string groupName)
-        {
-            _connection.Metadata["group"] = null;
-        }
-    }
-
     public class GroupProxy : AllClientProxy
     {
         private readonly string _groupName;
@@ -53,7 +33,8 @@ namespace SocketsSample.EndPoints.Hubs
 
         protected override bool Include(Connection connection)
         {
-            return (string)connection.Metadata["group"] == _groupName;
+            var groups = connection.Metadata.Get<HashSet<string>>("groups");
+            return groups?.Contains(_groupName) == true;
         }
     }
 
@@ -134,76 +115,31 @@ namespace SocketsSample.EndPoints.Hubs
         }
     }
 
-    public class LocalCallbacks : HubCallbacks
+    public class GroupManager : IGroupManager
     {
-        private readonly IServiceProvider _serviceProvider;
-        private readonly ConnectionList _connections;
-
-        public LocalCallbacks(IServiceProvider serviceProvier, ConnectionList connections)
+        private readonly Connection _connection;
+        public GroupManager(Connection connection)
         {
+            _connection = connection;
         }
 
-        public override Task InvokeAllConnections(string hubName, string method, params object[] args)
+        public void Add(string groupName)
         {
-            // REVIEW: Thread safety
-            var tasks = new List<Task>(_connections.Count);
-            var message = new InvocationDescriptor
-            {
-                Method = method,
-                Arguments = args
-            };
+            var groups = _connection.Metadata.GetOrAdd("groups", k => new HashSet<string>());
 
-            // TODO: serialize once per format by providing a different stream?
-            foreach (var connection in _connections)
+            lock (groups)
             {
-                var invocationAdapter =
-                    _serviceProvider
-                        .GetRequiredService<InvocationAdapterRegistry>()
-                        .GetInvocationAdapter((string)connection.Metadata["formatType"]);
-
-                tasks.Add(invocationAdapter.WriteInvocationDescriptor(message, connection.Channel.GetStream()));
+                groups.Add(groupName);
             }
-
-            return Task.WhenAll(tasks);
         }
-    }
 
-    public class PubSubcallbacks : HubCallbacks
-    {
-        private IPubSub _bus;
-
-        public override Task InvokeAllConnections(string hubName, string method, params object[] args)
+        public void Remove(string groupName)
         {
-            var message = new InvocationDescriptor
+            var groups = _connection.Metadata.Get<HashSet<string>>("groups");
+            lock (groups)
             {
-                Method = method,
-                Arguments = args
-            };
-
-            return _bus.Publish(hubName, message);
-        }
-    }
-
-    public abstract class HubCallbacks
-    {
-        public virtual Task InvokeConnection(string hubName, string connectionId, string method, params object[] args)
-        {
-            return Task.CompletedTask;
-        }
-
-        public virtual Task InvokeAllConnections(string hubName, string method, params object[] args)
-        {
-            return Task.CompletedTask;
-        }
-
-        public virtual Task InvokeGroupConnections(string hubName, string groupName, string method, params object[] args)
-        {
-            return Task.CompletedTask;
-        }
-
-        public virtual Task InvokeUserConnections(string hubName, string userId, string method, params object[] args)
-        {
-            return Task.CompletedTask;
+                groups.Remove(groupName);
+            }
         }
     }
 }

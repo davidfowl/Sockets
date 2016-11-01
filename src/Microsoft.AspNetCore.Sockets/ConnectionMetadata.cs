@@ -1,11 +1,12 @@
 ﻿
-using System.Collections.Generic;
+using System;
+using System.Collections.Concurrent;
 
 namespace Microsoft.AspNetCore.Sockets
 {
     public class ConnectionMetadata
     {
-        private IDictionary<string, object> _metadata = new Dictionary<string, object>();
+        private ConcurrentDictionary<string, object> _metadata = new ConcurrentDictionary<string, object>();
 
         public Format Format { get; set; } = Format.Text;
 
@@ -21,6 +22,16 @@ namespace Microsoft.AspNetCore.Sockets
             {
                 _metadata[key] = value;
             }
+        }
+
+        public T GetOrAdd<T>(string key, Func<string, T> factory)
+        {
+            return (T)_metadata.GetOrAdd(key, k => factory(k));
+        }
+
+        public T Get<T>(string key)
+        {
+            return (T)this[key];
         }
     }
 }
