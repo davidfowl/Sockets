@@ -102,7 +102,7 @@ namespace SocketsSample
             return new PubSubClientProxy(GetType().Name + "." + userId, _bus);
         }
 
-        public override IGroupManager Groups => new PubSubGroupManager(Subscribe, Connection);
+        public override IGroupManager Groups => new PubSubGroupManager(Subscribe, GetType().Name, Connection);
 
         public override async Task OnConnected(Connection connection)
         {

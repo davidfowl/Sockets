@@ -17,6 +17,8 @@ namespace SocketsSample
         {
             services.AddRouting();
 
+            services.AddSingleton<IPubSub, Bus>();
+
             services.AddSingleton<RpcEndpoint>();
             services.AddSingleton<ChatEndPoint>();
             services.AddSingleton<Chat>();

@@ -5,10 +5,10 @@ using Microsoft.Extensions.Logging;
 
 namespace SocketsSample.Hubs
 {
-    public class Chat : Hub
+    public class Chat : PubSubHub
     {
         // TODO: This needs to go away
-        public Chat(ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(jsonRpcLogger, serviceProvider)
+        public Chat(IPubSub bus, ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(bus, jsonRpcLogger, serviceProvider)
         {
         }
 
