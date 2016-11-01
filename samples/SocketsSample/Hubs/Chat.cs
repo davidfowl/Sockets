@@ -8,7 +8,7 @@ namespace SocketsSample.Hubs
     public class Chat : PubSubHub
     {
         // TODO: This needs to go away
-        public Chat(IPubSub bus, ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(bus, jsonRpcLogger, serviceProvider)
+        public Chat(IServiceProvider serviceProvider) : base(serviceProvider)
         {
         }
 
@@ -29,7 +29,7 @@ namespace SocketsSample.Hubs
 
     public class ChatNormal : Hub
     {
-        public ChatNormal(ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(jsonRpcLogger, serviceProvider)
+        public ChatNormal(IServiceProvider serviceProvider) : base(serviceProvider)
         {
         }
 
@@ -71,7 +71,7 @@ namespace SocketsSample.Hubs
     {
         private readonly IPubSub _bus;
 
-        public ChatRedis(IPubSub bus, ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(jsonRpcLogger, serviceProvider)
+        public ChatRedis(IPubSub bus, IServiceProvider serviceProvider) : base(serviceProvider)
         {
             _bus = bus;
         }

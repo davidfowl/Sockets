@@ -20,10 +20,10 @@ namespace SocketsSample
         private readonly IServiceProvider _serviceProvider;
 
 
-        public RpcEndpoint(ILogger<RpcEndpoint> logger, IServiceProvider serviceProvider)
+        public RpcEndpoint(IServiceProvider serviceProvider)
         {
             // TODO: Discover end points
-            _logger = logger;
+            _logger = serviceProvider.GetRequiredService<ILogger<RpcEndpoint>>();
             _serviceProvider = serviceProvider;
 
             DiscoverEndpoints();

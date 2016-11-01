@@ -21,8 +21,8 @@ namespace SocketsSample
         // Scoped services for this call
         private AsyncLocal<IServiceScope> _scope = new AsyncLocal<IServiceScope>();
 
-        public Hub(ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider)
-            : base(jsonRpcLogger, serviceProvider)
+        public Hub(IServiceProvider serviceProvider)
+            : base(serviceProvider)
         {
             _serviceProvider = serviceProvider;
             _all = new AllClientProxy(_serviceProvider, Connections);
@@ -76,13 +76,13 @@ namespace SocketsSample
 
     public class PubSubHub : Hub
     {
-        private readonly IPubSub _bus;
         private readonly IClientProxy _all;
+        private readonly IPubSub _bus;
 
-        public PubSubHub(IPubSub bus, ILogger<RpcEndpoint> jsonRpcLogger, IServiceProvider serviceProvider) : base(jsonRpcLogger, serviceProvider)
+        public PubSubHub(IServiceProvider serviceProvider) : base(serviceProvider)
         {
-            _bus = bus;
-            _all = new PubSubClientProxy(GetType().Name, bus);
+            _bus = serviceProvider.GetRequiredService<IPubSub>();
+            _all = new PubSubClientProxy(GetType().Name, _bus);
         }
 
         public override IClientProxy All => _all;
