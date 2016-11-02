@@ -28,7 +28,7 @@ namespace SocketsSample.EndPoints.Hubs
                 Arguments = args
             };
 
-            return _bus.Publish(typeof(THub).Name, message);
+            return _bus.Publish(typeof(THub).FullName, message);
         }
 
         public override Task InvokeConnection(string connectionId, string methodName, params object[] args)
@@ -68,9 +68,9 @@ namespace SocketsSample.EndPoints.Hubs
         {
             var subs = connection.Metadata.GetOrAdd("subscriptions", k => new List<IDisposable>());
 
-            subs.Add(Subscribe(typeof(THub).Name, connection));
-            subs.Add(Subscribe(typeof(THub).Name + "." + connection.ConnectionId, connection));
-            subs.Add(Subscribe(typeof(THub).Name + "." + connection.User.Identity.Name, connection));
+            subs.Add(Subscribe(typeof(THub).FullName, connection));
+            subs.Add(Subscribe(typeof(THub).FullName + "." + connection.ConnectionId, connection));
+            subs.Add(Subscribe(typeof(THub).FullName + "." + connection.User.Identity.Name, connection));
 
             return Task.CompletedTask;
         }
@@ -93,7 +93,7 @@ namespace SocketsSample.EndPoints.Hubs
         public override void AddGroup(Connection connection, string groupName)
         {
             var groups = connection.Metadata.GetOrAdd("groups", k => new ConcurrentDictionary<string, IDisposable>());
-            var key = typeof(THub).Name + "." + groupName;
+            var key = typeof(THub) + "." + groupName;
             groups.TryAdd(key, Subscribe(key, connection));
         }
 

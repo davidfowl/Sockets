@@ -27,8 +27,7 @@ namespace SocketsSample
                         break;
                     }
 
-                    // We can avoid the copy here but we'll deal with that later
-                    await Broadcast(input.ToArray());
+                    await Broadcast(input);
                 }
                 finally
                 {
@@ -53,6 +52,20 @@ namespace SocketsSample
             foreach (var c in Connections)
             {
                 tasks.Add(c.Channel.Output.WriteAsync(payload));
+            }
+
+            return Task.WhenAll(tasks);
+        }
+
+        private Task Broadcast(ReadableBuffer payload)
+        {
+            var tasks = new List<Task>(Connections.Count);
+
+            foreach (var c in Connections)
+            {
+                var write = c.Channel.Output.Alloc();
+                write.Append(payload);
+                tasks.Add(write.FlushAsync());
             }
 
             return Task.WhenAll(tasks);
