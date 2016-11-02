@@ -120,27 +120,34 @@ namespace SocketsSample
                     var invocationResult = new InvocationResultDescriptor();
                     invocationResult.Id = invocationDescriptor.Id;
 
-                    BeforeInvoke(connection, this);
+                    var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
-                    try
+                    using (var scope = scopeFactory.CreateScope())
                     {
-                        var args = invocationDescriptor.Arguments
-                            .Zip(parameters, (a, p) => Convert.ChangeType(a, p.ParameterType))
-                            .ToArray();
+                        object value = scope.ServiceProvider.GetService(type) ?? Activator.CreateInstance(type);
 
-                        invocationResult.Result = methodInfo.Invoke(this, args);
-                    }
-                    catch (TargetInvocationException ex)
-                    {
-                        invocationResult.Error = ex.InnerException.Message;
-                    }
-                    catch (Exception ex)
-                    {
-                        invocationResult.Error = ex.Message;
-                    }
-                    finally
-                    {
-                        AfterInvoke(connection, this);
+                        BeforeInvoke(connection, value);
+
+                        try
+                        {
+                            var args = invocationDescriptor.Arguments
+                                .Zip(parameters, (a, p) => Convert.ChangeType(a, p.ParameterType))
+                                .ToArray();
+
+                            invocationResult.Result = methodInfo.Invoke(value, args);
+                        }
+                        catch (TargetInvocationException ex)
+                        {
+                            invocationResult.Error = ex.InnerException.Message;
+                        }
+                        catch (Exception ex)
+                        {
+                            invocationResult.Error = ex.Message;
+                        }
+                        finally
+                        {
+                            AfterInvoke(connection, value);
+                        }
                     }
 
                     return invocationResult;

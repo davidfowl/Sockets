@@ -1,145 +1,98 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Channels;
 using Microsoft.AspNetCore.Sockets;
-using Microsoft.Extensions.DependencyInjection;
 using SocketsSample.Hubs;
 
 namespace SocketsSample.EndPoints.Hubs
 {
-    public class UserProxy : AllClientProxy
+    public class UserProxy<THub> : IClientProxy
     {
         private readonly string _userId;
+        private readonly HubLifetimeManager<THub> _lifetimeManager;
 
-        public UserProxy(IServiceProvider serviceProvier, ConnectionList connections, string userId) : base(serviceProvier, connections)
+        public UserProxy(HubLifetimeManager<THub> lifetimeManager, string userId)
         {
+            _lifetimeManager = lifetimeManager;
             _userId = userId;
-        }
-
-        protected override bool Include(Connection connection)
-        {
-            return connection.User.Identity.Name == _userId;
-        }
-    }
-
-    public class GroupProxy : AllClientProxy
-    {
-        private readonly string _groupName;
-        public GroupProxy(IServiceProvider serviceProvier, ConnectionList connections, string groupName) : base(serviceProvier, connections)
-        {
-            _groupName = groupName;
-        }
-
-        protected override bool Include(Connection connection)
-        {
-            var groups = connection.Metadata.Get<HashSet<string>>("groups");
-            return groups?.Contains(_groupName) == true;
-        }
-    }
-
-    public class AllClientProxy : IClientProxy
-    {
-        private readonly IServiceProvider _serviceProvider;
-        private readonly ConnectionList _connections;
-
-        public AllClientProxy(IServiceProvider serviceProvier, ConnectionList connections)
-        {
-            _serviceProvider = serviceProvier;
-            _connections = connections;
         }
 
         public Task Invoke(string method, params object[] args)
         {
-            // REVIEW: Thread safety
-            var tasks = new List<Task>(_connections.Count);
-            var message = new InvocationDescriptor
-            {
-                Method = method,
-                Arguments = args
-            };
-
-            // TODO: serialize once per format by providing a different stream?
-            foreach (var connection in _connections)
-            {
-                if (!Include(connection))
-                {
-                    continue;
-                }
-                var invocationAdapter =
-                    _serviceProvider
-                        .GetRequiredService<InvocationAdapterRegistry>()
-                        .GetInvocationAdapter((string)connection.Metadata["formatType"]);
-
-                tasks.Add(invocationAdapter.WriteInvocationDescriptor(message, connection.Channel.GetStream()));
-            }
-
-            return Task.WhenAll(tasks);
-        }
-
-        protected virtual bool Include(Connection connection)
-        {
-            return true;
+            return _lifetimeManager.InvokeUser(_userId, method, args);
         }
     }
 
-    public class SingleClientProxy : IClientProxy
+    public class GroupProxy<THub> : IClientProxy
+    {
+        private readonly string _groupName;
+        private readonly HubLifetimeManager<THub> _lifetimeManager;
+
+        public GroupProxy(HubLifetimeManager<THub> lifetimeManager, string groupName)
+        {
+            _lifetimeManager = lifetimeManager;
+            _groupName = groupName;
+        }
+
+        public Task Invoke(string method, params object[] args)
+        {
+            return _lifetimeManager.InvokeGroup(_groupName, method, args);
+        }
+    }
+
+    public class AllClientProxy<THub> : IClientProxy
+    {
+        private readonly HubLifetimeManager<THub> _lifetimeManager;
+
+        public AllClientProxy(HubLifetimeManager<THub> lifetimeManager)
+        {
+            _lifetimeManager = lifetimeManager;
+        }
+
+        public Task Invoke(string method, params object[] args)
+        {
+            // TODO: More than just chat
+            return _lifetimeManager.InvokeAll(method, args);
+        }
+    }
+
+    public class SingleClientProxy<THub> : IClientProxy
     {
         private readonly string _connectionId;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly ConnectionList _connections;
+        private readonly HubLifetimeManager<THub> _lifetimeManager;
 
-        public SingleClientProxy(IServiceProvider serviceProvier, ConnectionList connections, string connectionId)
+
+        public SingleClientProxy(HubLifetimeManager<THub> lifetimeManager, string connectionId)
         {
-            _serviceProvider = serviceProvier;
-            _connections = connections;
+            _lifetimeManager = lifetimeManager;
             _connectionId = connectionId;
         }
 
         public Task Invoke(string method, params object[] args)
         {
-            var connection = _connections[_connectionId];
-
-            var invocationAdapter =
-                _serviceProvider
-                    .GetRequiredService<InvocationAdapterRegistry>()
-                    .GetInvocationAdapter((string)connection.Metadata["formatType"]);
-
-            var message = new InvocationDescriptor
-            {
-                Method = method,
-                Arguments = args
-            };
-
-            return invocationAdapter.WriteInvocationDescriptor(message, connection.Channel.GetStream());
+            return _lifetimeManager.InvokeConnection(_connectionId, method, args);
         }
     }
 
-    public class GroupManager : IGroupManager
+    public class GroupManager<THub> : IGroupManager
     {
         private readonly Connection _connection;
-        public GroupManager(Connection connection)
+        private HubLifetimeManager<THub> _lifetimeManager;
+
+        public GroupManager(Connection connection, HubLifetimeManager<THub> lifetimeManager)
         {
             _connection = connection;
+            _lifetimeManager = lifetimeManager;
         }
 
         public void Add(string groupName)
         {
-            var groups = _connection.Metadata.GetOrAdd("groups", k => new HashSet<string>());
-
-            lock (groups)
-            {
-                groups.Add(groupName);
-            }
+            _lifetimeManager.AddGroup(_connection, groupName);
         }
 
         public void Remove(string groupName)
         {
-            var groups = _connection.Metadata.Get<HashSet<string>>("groups");
-            lock (groups)
-            {
-                groups.Remove(groupName);
-            }
+            _lifetimeManager.RemoveGroup(_connection, groupName);
         }
     }
 }

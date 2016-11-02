@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SocketsSample.EndPoints.Hubs;
 using SocketsSample.Hubs;
 
 namespace SocketsSample
@@ -18,6 +19,8 @@ namespace SocketsSample
             services.AddRouting();
 
             services.AddSingleton<IPubSub, Bus>();
+            services.AddSingleton(typeof(HubLifetimeManager<>), typeof(PubSubHubLifetimeManager<>));
+            services.AddSingleton(typeof(HubEndPoint<>), typeof(HubEndPoint<>));
 
             services.AddSingleton<RpcEndpoint>();
             services.AddSingleton<ChatEndPoint>();
@@ -42,7 +45,7 @@ namespace SocketsSample
 
             app.UseSockets(routes =>
             {
-                routes.MapSocketEndpoint<Chat>("/hubs");
+                routes.MapSocketEndpoint<HubEndPoint<Chat>>("/hubs");
                 routes.MapSocketEndpoint<ChatEndPoint>("/chat");
                 routes.MapSocketEndpoint<RpcEndpoint>("/jsonrpc");
             });
