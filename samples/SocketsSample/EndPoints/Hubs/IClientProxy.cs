@@ -2,7 +2,6 @@
 
 namespace SocketsSample.Hubs
 {
-
     public interface IClientProxy
     {
         /// <summary>

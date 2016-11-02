@@ -1,6 +1,5 @@
 ﻿namespace SocketsSample.Hubs
 {
-
     public interface IHubConnectionContext
     {
         IClientProxy All { get; }

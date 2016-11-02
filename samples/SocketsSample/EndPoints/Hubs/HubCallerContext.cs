@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Sockets;
 
 namespace SocketsSample.Hubs
 {
-
     public class HubCallerContext
     {
         public HubCallerContext(Connection connection)
