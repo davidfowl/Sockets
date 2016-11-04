@@ -9,13 +9,17 @@ using Channels;
 using Microsoft.AspNetCore.Sockets;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using StackExchange.Redis;
 
 namespace Microsoft.AspNetCore.SignalR.Redis
 {
     public class RedisHubLifetimeManager<THub> : HubLifetimeManager<THub>, IDisposable
     {
+        // TODO: Use something more efficient for sending data over the bus
+        private readonly JsonSerializer _serializer = new JsonSerializer();
         private readonly ConnectionList _connections = new ConnectionList();
+
         // TODO: Investigate "memory leak" entries never get removed
         private readonly ConcurrentDictionary<string, GroupData> _groups = new ConcurrentDictionary<string, GroupData>();
         private readonly InvocationAdapterRegistry _registry;
@@ -53,7 +57,7 @@ namespace Microsoft.AspNetCore.SignalR.Redis
             });
         }
 
-        public override Task InvokeAllAsync(string methodName, params object[] args)
+        public override Task InvokeAllAsync(string methodName, object[] args)
         {
             var message = new InvocationDescriptor
             {
@@ -64,7 +68,7 @@ namespace Microsoft.AspNetCore.SignalR.Redis
             return PublishAsync(typeof(THub).FullName, message);
         }
 
-        public override Task InvokeConnectionAsync(string connectionId, string methodName, params object[] args)
+        public override Task InvokeConnectionAsync(string connectionId, string methodName, object[] args)
         {
             var message = new InvocationDescriptor
             {
@@ -75,7 +79,7 @@ namespace Microsoft.AspNetCore.SignalR.Redis
             return PublishAsync(typeof(THub).FullName + "." + connectionId, message);
         }
 
-        public override Task InvokeGroupAsync(string groupName, string methodName, params object[] args)
+        public override Task InvokeGroupAsync(string groupName, string methodName, object[] args)
         {
             var message = new InvocationDescriptor
             {
@@ -86,7 +90,7 @@ namespace Microsoft.AspNetCore.SignalR.Redis
             return PublishAsync(typeof(THub).FullName + "." + groupName, message);
         }
 
-        public override Task InvokeUserAsync(string userId, string methodName, params object[] args)
+        public override Task InvokeUserAsync(string userId, string methodName, object[] args)
         {
             var message = new InvocationDescriptor
             {
@@ -99,16 +103,8 @@ namespace Microsoft.AspNetCore.SignalR.Redis
 
         private async Task PublishAsync(string channel, InvocationDescriptor message)
         {
-            // TODO: What format??
-            var invocationAdapter = _registry.GetInvocationAdapter("json");
-
-            // BAD
-            using (var ms = new MemoryStream())
-            {
-                await invocationAdapter.WriteInvocationDescriptorAsync(message, ms);
-
-                await _bus.PublishAsync(channel, ms.ToArray());
-            }
+            byte[] data = ToBytes(message);
+            await _bus.PublishAsync(channel, data);
         }
 
         public override Task OnConnectedAsync(Connection connection)
@@ -256,6 +252,25 @@ namespace Microsoft.AspNetCore.SignalR.Redis
         {
             _bus.UnsubscribeAll();
             _redisServerConnection.Dispose();
+        }
+
+        private byte[] ToBytes(InvocationDescriptor message)
+        {
+            // TODO: Pool these
+            var ms = new MemoryStream();
+            var jsonWriter = new JsonTextWriter(new StreamWriter(ms));
+
+            _serializer.Serialize(jsonWriter, message);
+            jsonWriter.Flush();
+            return ms.ToArray();
+        }
+
+        private InvocationDescriptor FromBytes(byte[] data)
+        {
+            var ms = new MemoryStream(data);
+            var jsonReader = new JsonTextReader(new StreamReader(ms));
+
+            return _serializer.Deserialize<InvocationDescriptor>(jsonReader);
         }
 
         private class LoggerTextWriter : TextWriter

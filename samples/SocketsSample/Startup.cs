@@ -23,8 +23,8 @@ namespace SocketsSample
                     {
                         options.RegisterInvocationAdapter<ProtobufInvocationAdapter>("protobuf");
                         options.RegisterInvocationAdapter<LineInvocationAdapter>("line");
-                    });
-                 // .AddRedis();
+                    })
+                 .AddRedis();
 
             services.AddSingleton<ChatEndPoint>();
             services.AddSingleton<ProtobufSerializer>();
